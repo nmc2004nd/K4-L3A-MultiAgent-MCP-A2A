@@ -14,6 +14,10 @@ from .contracts import Contracts
 SECRET_PATTERN = re.compile(r"sk-team-[A-Za-z0-9_-]{8,}")
 MAX_FILE_BYTES = 1024 * 1024
 MAX_SUBMISSION_BYTES = 12 * 1024 * 1024
+REQUIRED_LIFECYCLE_EVENTS = (
+    "case_received", "task_assigned", "tool_result_consumed", "handoff",
+    "policy_decided", "verification_completed", "case_finalized",
+)
 
 
 def _json_object(path: Path) -> dict[str, Any]:
@@ -65,6 +69,7 @@ def validate_artifacts(
         raise ValueError("traces/trace.jsonl is missing or not UTF-8") from exc
     normalized_lines: list[str] = []
     seen_events: set[str] = set()
+    case_event_types: dict[str, list[str]] = {case_id: [] for case_id in case_set.case_ids}
     for number, line in enumerate(trace_lines, 1):
         if not line.strip():
             continue
@@ -78,7 +83,18 @@ def validate_artifacts(
         if event["event_id"] in seen_events:
             raise ValueError(f"traces/trace.jsonl:{number}: duplicate event_id")
         seen_events.add(event["event_id"])
+        case_event_types[event["case_id"]].append(event["event_type"])
         normalized_lines.append(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
+
+    for case_id, event_types in case_event_types.items():
+        positions: list[int] = []
+        for event_type in REQUIRED_LIFECYCLE_EVENTS:
+            try:
+                positions.append(event_types.index(event_type))
+            except ValueError as exc:
+                raise ValueError(f"traces/trace.jsonl: {case_id} is missing lifecycle event {event_type}") from exc
+        if positions != sorted(positions):
+            raise ValueError(f"traces/trace.jsonl: {case_id} lifecycle events are out of order")
 
     serialized = [json.dumps(value, ensure_ascii=False) for value in outputs.values()]
     if SECRET_PATTERN.search("\n".join([*serialized, *normalized_lines])):

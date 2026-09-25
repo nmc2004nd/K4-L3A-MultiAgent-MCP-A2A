@@ -38,6 +38,32 @@ def test_load_case_set_accepts_exact_input_inventory(tmp_path: Path) -> None:
     assert loaded.case_ids == tuple(case_ids)
 
 
+def test_load_case_set_accepts_utf8_bom_from_windows_tools(tmp_path: Path) -> None:
+    case_id = "CASE_001"
+    manifest = {
+        "case_set_version": "test-v1",
+        "variant_id": VARIANT_ID,
+        "case_ids": [case_id],
+    }
+    (tmp_path / "case-set.json").write_text(json.dumps(manifest), encoding="utf-8-sig")
+    write_json(tmp_path / "inputs" / f"{case_id}.json", {"case_id": case_id})
+
+    assert load_case_set(tmp_path, expected_count=1).case_ids == (case_id,)
+
+
+def test_load_case_set_accepts_utf8_bom_from_windows_tools(tmp_path: Path) -> None:
+    case_id = "CASE_001"
+    payload = {
+        "case_set_version": "test-v1",
+        "variant_id": VARIANT_ID,
+        "case_ids": [case_id],
+    }
+    (tmp_path / "case-set.json").write_text(json.dumps(payload), encoding="utf-8-sig")
+    write_json(tmp_path / "inputs" / f"{case_id}.json", {"case_id": case_id})
+
+    assert load_case_set(tmp_path, expected_count=1).case_ids == (case_id,)
+
+
 def test_generated_manifest_matches_public_contract() -> None:
     root = Path(__file__).resolve().parents[1]
     contracts = Contracts(root / "contracts" / "schemas")

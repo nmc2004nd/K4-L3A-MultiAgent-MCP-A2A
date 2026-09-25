@@ -21,7 +21,9 @@ class CaseSet:
 
 def _object(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        # `utf-8-sig` accepts normal UTF-8 and the UTF-8 BOM emitted by some
+        # Windows tools, while still rejecting non-UTF-8 payloads.
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"{path}: invalid UTF-8 JSON") from exc
     if not isinstance(value, dict):
