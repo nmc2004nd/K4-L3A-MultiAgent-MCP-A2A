@@ -1,10 +1,21 @@
+"""Observable, evidence-first A2A workflow for the L3A variant.
+
+This module deliberately uses a small async state machine instead of a framework.
+The public contracts, not an agent prompt, define the boundary of every final answer.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+import httpx2
+
+from . import OUTPUT_SCHEMA_VERSION
+from .cases import CASE_ID_PATTERN
 from .mcp_gateway import EvidenceGateway
+from .policy_engine import decide, verify
 from .trace import TraceWriter
 
 ISSUES = {

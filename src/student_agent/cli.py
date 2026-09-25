@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from .cases import load_case_set
+from .cases import CaseSet, load_case_set
 from .config import Settings
 from .contracts import Contracts
 from .mcp_gateway import connect_gateway
