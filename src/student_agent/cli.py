@@ -15,6 +15,12 @@ from .trace import TraceWriter
 from .workflow import solve_case
 
 
+def _first_group_error(error: BaseException) -> BaseException:
+    while isinstance(error, BaseExceptionGroup) and error.exceptions:
+        error = error.exceptions[0]
+    return error
+
+
 def _root(value: str) -> Path:
     return Path(value).resolve()
 
@@ -80,8 +86,7 @@ def main() -> None:
         if args.command == "validate-inputs":
             case_set = load_case_set(root)
             print(
-                f"OK: {case_set.variant_id} / {case_set.version} / "
-                f"{len(case_set.case_ids)} cases"
+                f"OK: {case_set.variant_id} / {case_set.version} / {len(case_set.case_ids)} cases"
             )
         elif args.command == "mcp-tools":
             asyncio.run(_show_tools(root))
@@ -95,6 +100,10 @@ def main() -> None:
         elif args.command == "package":
             destination = package_submission(root, root / args.output)
             print(f"OK: {destination}")
+    except BaseExceptionGroup as exc:
+        error = _first_group_error(exc)
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc

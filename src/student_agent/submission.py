@@ -14,6 +14,15 @@ from .contracts import Contracts
 SECRET_PATTERN = re.compile(r"sk-team-[A-Za-z0-9_-]{8,}")
 MAX_FILE_BYTES = 1024 * 1024
 MAX_SUBMISSION_BYTES = 12 * 1024 * 1024
+REQUIRED_EVENTS = {
+    "case_received",
+    "task_assigned",
+    "tool_result_consumed",
+    "handoff",
+    "policy_decided",
+    "verification_completed",
+    "case_finalized",
+}
 
 
 def _json_object(path: Path) -> dict[str, Any]:
@@ -65,6 +74,7 @@ def validate_artifacts(
         raise ValueError("traces/trace.jsonl is missing or not UTF-8") from exc
     normalized_lines: list[str] = []
     seen_events: set[str] = set()
+    events_by_case: dict[str, list[dict[str, Any]]] = {case_id: [] for case_id in case_set.case_ids}
     for number, line in enumerate(trace_lines, 1):
         if not line.strip():
             continue
@@ -78,7 +88,38 @@ def validate_artifacts(
         if event["event_id"] in seen_events:
             raise ValueError(f"traces/trace.jsonl:{number}: duplicate event_id")
         seen_events.add(event["event_id"])
+        events_by_case[event["case_id"]].append(event)
         normalized_lines.append(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
+
+    for case_id, output in outputs.items():
+        events = events_by_case[case_id]
+        event_types = {event["event_type"] for event in events}
+        missing_events = sorted(REQUIRED_EVENTS - event_types)
+        if missing_events:
+            raise ValueError(f"{case_id}: trace is missing required events: {missing_events}")
+        if (
+            events[0]["event_type"] != "case_received"
+            or events[-1]["event_type"] != "case_finalized"
+        ):
+            raise ValueError(f"{case_id}: trace must start with receive and end with finalize")
+
+        output_refs = set(output["evidence_refs"])
+        if not output_refs:
+            raise ValueError(f"{case_id}: output has no authoritative evidence")
+        consumed_refs = {
+            evidence_ref
+            for event in events
+            if event["event_type"] == "tool_result_consumed"
+            for evidence_ref in event.get("evidence_refs", [])
+        }
+        if not output_refs <= consumed_refs:
+            raise ValueError(f"{case_id}: output references evidence not consumed in trace")
+        for claim in output.get("claim_assessments", []):
+            claim_refs = set(claim["evidence_refs"])
+            if not claim_refs or not claim_refs <= consumed_refs:
+                raise ValueError(
+                    f"{case_id}: claim {claim['claim_id']} has missing or unconsumed evidence"
+                )
 
     serialized = [json.dumps(value, ensure_ascii=False) for value in outputs.values()]
     if SECRET_PATTERN.search("\n".join([*serialized, *normalized_lines])):
